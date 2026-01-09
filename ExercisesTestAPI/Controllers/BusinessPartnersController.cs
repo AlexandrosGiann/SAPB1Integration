@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ExercisesTestAPI.Dtos.BusinessPartners;
 using ExercisesTestAPI.Services;
+using System.Runtime.CompilerServices;
 
 namespace ExercisesTestAPI.Controllers;
 
@@ -14,6 +15,12 @@ public sealed class BusinessPartnersController : ControllerBase
         "cCustomer",
         "cSupplier",
         "cLid"
+    };
+
+    private static readonly HashSet<string> AllowedAddressTypes = new(StringComparer.Ordinal)
+    {
+        "bo_ShipTo",
+        "bo_BillTo"
     };
 
     private readonly ISapServiceLayerClient _sap;
@@ -39,6 +46,15 @@ public sealed class BusinessPartnersController : ControllerBase
         if (!AllowedCardTypes.Contains(req.CardType))
             return BadRequest("CardType πρέπει να είναι ένα από: cCustomer, cSupplier, cLid.");
 
+        foreach (var address in req.BPAddresses)
+        {
+            if (!AllowedAddressTypes.Contains(address.AddressType))
+                return BadRequest("Κάθε AddressType πρέπει να είναι ένα από: bo_ShipTo, bo_BillTo.");
+        }
+
+        //if (req.ContactEmployees.Count == 0)
+        //    return BadRequest("Πρέπει να υπάρχει τουλάχιστον ένα ContactEmployee.");
+
         if (await BusinessPartnerExistsAsync(req.CardCode, ct))
             return Conflict($"Business Partner με CardCode '{req.CardCode}' υπάρχει ήδη.");
 
@@ -49,18 +65,41 @@ public sealed class BusinessPartnersController : ControllerBase
             CardType = req.CardType,
             FederalTaxID = req.FederalTaxID,
             BilltoDefault = req.BilltoDefault,
-            ShipToDefault = req.ShipToDefault
+            ShipToDefault = req.ShipToDefault,
+            BPAddresses = req.BPAddresses,
+            ContactEmployees = req.ContactEmployees
         };
 
         await _sap.PostAsync("BusinessPartners", payload, ct);
+        if (req.BPAddresses.Count > 0)
+        {
+            bool billToFound = false;
 
+            foreach (var address in req.BPAddresses)
+            {
+                if (address.AddressType == "bo_BillTo")
+                {
+                    billToFound = true;
+                    break;
+                }
+            }
+            if (!billToFound)
+            {
+                return Ok(new CreateBusinessPartnertResponse2
+                {
+                    CardCode = req.CardCode,
+                    CardName = req.CardName,
+                    BillNotFound = "Καλό είναι να υπάρχει τουλάχιστον ένα bo_billTo στα AdressType του BPAdressess."
+                });
+            }
+        }
         return Ok(new CreateBusinessPartnerResponse
         {
             CardCode = req.CardCode,
             CardName = req.CardName
         });
     }
-
+   
     private async Task<bool> BusinessPartnerExistsAsync(string cardCode, CancellationToken ct)
     {
         try
