@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using ExercisesTestAPI.Dtos.BusinessPartners;
 using ExercisesTestAPI.Services;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace ExercisesTestAPI.Controllers;
 
@@ -35,9 +36,11 @@ public sealed class BusinessPartnersController : ControllerBase
         [FromBody] CreateBusinessPartnerRequest req,
         CancellationToken ct)
     {
+        req.CardCode = Regex.Replace(req.CardCode, @"[^a-zA-Z0-9]", "");
         if (string.IsNullOrWhiteSpace(req.CardCode))
             return BadRequest("CardCode είναι υποχρεωτικό.");
 
+        req.CardName = Regex.Replace(req.CardName, @"[^a-zA-Z0-9 ]", "");
         if (string.IsNullOrWhiteSpace(req.CardName))
             return BadRequest("CardName είναι υποχρεωτικό.");
 
