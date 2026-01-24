@@ -4,6 +4,9 @@ using ExercisesTestAPI.Dtos.BusinessPartners;
 using ExercisesTestAPI.Services;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Serilog;
 
 namespace ExercisesTestAPI.Controllers;
 
@@ -36,6 +39,18 @@ public sealed class BusinessPartnersController : ControllerBase
         [FromBody] CreateBusinessPartnerRequest req,
         CancellationToken ct)
     {
+        // Write incoming request to Serilog (structured). Wrap in try/catch to avoid failing the request if logging fails.
+        try
+        {
+            Log.ForContext<BusinessPartnersController>()
+               .Information("CreateBusinessPartner request {@Request}", req);
+        }
+        catch (Exception ex)
+        {
+            Log.ForContext<BusinessPartnersController>()
+               .Warning(ex, "Failed to log incoming CreateBusinessPartner request.");
+        }
+
         req.CardCode = Regex.Replace(req.CardCode, @"[^a-zA-Z0-9]", "");
         if (string.IsNullOrWhiteSpace(req.CardCode))
             return BadRequest("CardCode είναι υποχρεωτικό.");
@@ -102,7 +117,7 @@ public sealed class BusinessPartnersController : ControllerBase
             CardName = req.CardName
         });
     }
-   
+
     private async Task<bool> BusinessPartnerExistsAsync(string cardCode, CancellationToken ct)
     {
         try

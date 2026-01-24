@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using ExercisesTestAPI.Dtos.SalesOrders;
 using ExercisesTestAPI.Options;
 using ExercisesTestAPI.Services;
+using Serilog;
 
 namespace ExercisesTestAPI.Controllers;
 
@@ -25,6 +26,18 @@ public sealed class SalesOrdersController : ControllerBase
         [FromBody] CreateSalesOrderRequest req,
         CancellationToken ct)
     {
+        // Log incoming request via Serilog (structured). Wrap in try/catch to avoid failing request on logging errors.
+        try
+        {
+            Log.ForContext<SalesOrdersController>()
+               .Information("CreateSalesOrder request {@Request}", req);
+        }
+        catch (Exception ex)
+        {
+            Log.ForContext<SalesOrdersController>()
+               .Warning(ex, "Failed to log incoming CreateSalesOrder request.");
+        }
+
         if (string.IsNullOrWhiteSpace(req.CardCode))
             return BadRequest("CardCode είναι υποχρεωτικό.");
 
