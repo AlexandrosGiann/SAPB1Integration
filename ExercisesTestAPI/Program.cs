@@ -4,6 +4,7 @@ using ExercisesTestAPI.Options;
 using ExercisesTestAPI.Services;
 using Serilog;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Http;
 
 var configuration = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
@@ -26,9 +27,11 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // Make sure the host uses Serilog and reads from the same configuration
-    builder.Host.UseSerilog((ctx, cfg) => cfg.ReadFrom.Configuration(ctx.Configuration).Enrich.FromLogContext());
+    builder.Host.UseSerilog((ctx, cfg) =>
+        cfg.ReadFrom.Configuration(ctx.Configuration).Enrich.FromLogContext());
 
     builder.Services.AddControllers();
+    builder.Services.AddEndpointsApiExplorer(); 
     builder.Services.AddSwaggerGen();
 
     builder.Services.Configure<SapServiceLayerOptions>(
@@ -64,14 +67,74 @@ try
 
     var app = builder.Build();
 
+    // HSTS 
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHsts();
+    }
+
+    // Redirect HTTP -> HTTPS
+    app.UseHttpsRedirection();
+
+    // Serilog request logging
+    app.UseSerilogRequestLogging();
+
+    
+    app.Use(async (context, next) =>
+    {
+        // ---------- General security headers ----------
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+        context.Response.Headers["Permissions-Policy"] =
+            "geolocation=(), microphone=(), camera=(), payment=(), usb=()";
+        context.Response.Headers["X-DNS-Prefetch-Control"] = "off";
+        context.Response.Headers["X-Permitted-Cross-Domain-Policies"] = "none";
+
+        // ---------- Path-based tweaks (Swagger / OpenAPI) ----------
+        var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
+        var isSwagger = path.StartsWith("/swagger") || path.Contains("api-docs") || path.Contains("openapi");
+
+        
+        if (isSwagger)
+        {
+            context.Response.Headers["Content-Security-Policy"] =
+                "default-src 'self'; " +
+                "base-uri 'self'; " +
+                "object-src 'none'; " +
+                "frame-ancestors 'none'; " +
+                "form-action 'self'; " +
+                "img-src 'self' data:; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "script-src 'self' 'unsafe-inline'; " +
+                "upgrade-insecure-requests";
+
+            context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow, nosnippet, noarchive";
+            context.Response.Headers["Cache-Control"] = "no-store, no-cache, max-age=0";
+            context.Response.Headers["Pragma"] = "no-cache";
+            context.Response.Headers["Expires"] = "0";
+        }
+        else
+        {
+            context.Response.Headers["Content-Security-Policy"] =
+                "default-src 'self'; " +
+                "base-uri 'self'; " +
+                "object-src 'none'; " +
+                "frame-ancestors 'none'; " +
+                "form-action 'self'; " +
+                "upgrade-insecure-requests";
+        }
+
+        await next();
+    });
+
+    // Swagger
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
         app.UseSwaggerUI();
     }
 
-    app.UseHttpsRedirection();
-    app.UseSerilogRequestLogging(); // logs basic request information via Serilog
     app.MapControllers();
     app.Run();
 }
